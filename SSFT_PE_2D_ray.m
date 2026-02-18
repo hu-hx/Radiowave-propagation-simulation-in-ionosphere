@@ -5,7 +5,8 @@ tic
 % by huhaixiang  2026.1.18
 % 后续还可以加入two way,brick,3D
 
-% 1.24 加入了可以使用pharlap工具箱中的折射指数的设置；绘图中加入了射线；考虑了地球曲率
+% 1.24 加入了可以使用pharlap工具箱中的折射指数的设置；绘图中加入了射线；考虑了地球曲率，做了变换
+% 2.18 修改了PL计算中lambda单位错误的问题; 将展平变换部分放入到n的计算函数中
 
 %% 参数设置
 
@@ -69,8 +70,7 @@ switch inti_methods
         u_fs2 = k0*beta/(2*sqrt(2*pi*log(2)))*(exp(-1i*k0*theta0*z)).*exp(-beta^2/(8*log(2))*k0^2*(z+z0).^2);
         u(:,1) = u_fs1 - u_fs2;   
 end
-
-%u(:,1) = u(:,1)/max(abs(u(:,1)));
+u(:,1) = u(:,1)/max(abs(u(:,1)));
 
 
 
@@ -82,23 +82,7 @@ w( z < d*z_max ) = 1;
 
 %% 折射指数  
 
-% 公式: h = R * (exp(z/R) - 1)
-% z_km 是你的 PE 网格纵坐标向量
-h_real_km = R * (exp(z_km ./ R) - 1); 
-
-% 2. 在真实高度 h_real_km 处获取物理折射率 n_raw
-% 注意：这里传入的是 h_real_km，因为 IRI/电子浓度是随物理高度分布的
-n = Ne2n(file_Ne, h_real_km, f_Mhz, absorb, false, n_mat);
-
-% 3. 应用地球展开变换得到 PE 等效折射率
-% 精确公式: n_PE(z) = n_raw(h) * (R + h) / R
-% 其中 (R+h)/R 正好等于 exp(z/R)
-n = n .* (1 + h_real_km ./ R); 
-% 或者写成: n = n_raw .* exp(z_km ./ R); 结果是一样的
-
-%% 滤波器
-evanescent_mask = zeros(size(pz));
-evanescent_mask(pz < k0) = 1; % 只有 pz < k0 的波是传播波，其他是倏逝波
+n = Ne2n(file_Ne, z_km,R,Nz,d, f_Mhz, absorb, n_mat);
 
 %% SSFT步进傅里叶算法 水平极化波采用快速正弦变换
 
@@ -125,7 +109,7 @@ end
  
 for j = 1:Nx-1 
     dst_u   = dst(u(:,j));
-    u(:,j+1) = k1 .* idst( k2.*dst_u.*evanescent_mask ) .* w ; 
+    u(:,j+1) = k1 .* idst( k2.*dst_u ) .* w ; 
 end
 
 
@@ -133,8 +117,8 @@ end
 
 fprintf('正在计算传播损耗...\n');
 
-%F = 20*log10(abs(u)) + 10*log10(R*sin(x_km/R)+1e-6) + 10*log10(lambda);
-L = -20*log10(abs(u)) + 20*log10(4*pi) + 10*log10(R*sin(x_km/R)+1e-10) - 30*log10(lambda);
+%F = 20*log10(abs(u)) + 10*log10(R*sin(x_km/R)+1e-6) + 10*log10(lambda/1e3);
+L = -20*log10(abs(u)) + 20*log10(4*pi) + 10*log10(R*sin(x_km/R)+1e-10) - 30*log10(lambda/1e3);
 
 %% 图像的绘制
 
@@ -173,7 +157,7 @@ figure('Position',[100, 100, 1000, 500])
 pcolor(x_km(secx),z_km(secz),L(secz,secx))
 shading flat;
 colormap(fliplr(jet))
-clim([60 120]);    % 颜色范围锁定
+clim([100 180]);    % 颜色范围锁定
 colorbar;
 hold on;
 
@@ -182,14 +166,13 @@ for idx = 1:length(ray_path_data)
     gndrng = ray_path_data(idx).ground_range;
     h_real = ray_path_data(idx).height;
     z_flat_plot = R * log(1 + h_real ./ R);
-    
+
     % 在图上绘制转换后的坐标
-    plot(gndrng, z_flat_plot, 'Color', 'w', 'LineWidth', 1); % 建议用白色或灰色对比度更高
+    plot(gndrng, z_flat_plot, 'Color', 'w', 'LineWidth', 0.5); % 建议用白色或灰色对比度更高
 end
 hold off;
 
 ylim([0,z_max_km_plot])
-
 
 xlabel('距离/km');
 ylabel('高度/km');
@@ -203,27 +186,32 @@ toc
 
 
 
-function n = Ne2n(Ne_flie,z_km,f_Mhz,absorb,figure,n_mat)
+function n = Ne2n(Ne_flie,z_km,R,Nz,d,f_Mhz,absorb,n_mat)
+
+h_km = R * (exp(z_km ./ R) - 1);  % 网格z_km -> 真实高度h_km
 
 if n_mat
 n_pharlap = load('n.mat').n;
 z_km_pharlap = load('zkm.mat').zkm;
-n = interp1(z_km_pharlap,n_pharlap,z_km,'linear','extrap');
+n = interp1(z_km_pharlap,n_pharlap,h_km,'linear','extrap');
+n = n .* (1 + h_km ./ R); 
+idx_sponge_start = floor(Nz * d * 0.8); 
+n(idx_sponge_start:end) = n(idx_sponge_start);
 return
 end
 
 
 % 读取电子浓度Ne
 Ne_file = table2array(readtable(Ne_flie,'VariableNamingRule', 'preserve'));
-Ne_cm3 = interp1(Ne_file(:,1),Ne_file(:,2),z_km,'linear');
+Ne_cm3 = interp1(Ne_file(:,1),Ne_file(:,2),h_km,'linear');
 Ne_e12m3 = Ne_cm3*1e-6;         % 原单位:cm-3 -> 10^12 m-3
 
 if absorb % 考虑吸收效应 参考"一种基于宽角抛物方程的电离层行进式扰动短波传播效应数值计算方法"
     msis = table2array(readtable("nrlmsis_output.txt",'VariableNamingRule','preserve'));
-    O  = interp1(msis(:,6), msis(:,9),  z_km, 'linear');     % 单位:cm-3
-    N2 = interp1(msis(:,6), msis(:,10), z_km, 'linear');
-    O2 = interp1(msis(:,6), msis(:,11), z_km, 'linear');
-    Te = interp1(msis(:,6), msis(:,13), z_km, 'linear');     %单位：K
+    O  = interp1(msis(:,6), msis(:,9),  h_km, 'linear');     % 单位:cm-3
+    N2 = interp1(msis(:,6), msis(:,10), h_km, 'linear');
+    O2 = interp1(msis(:,6), msis(:,11), h_km, 'linear');
+    Te = interp1(msis(:,6), msis(:,13), h_km, 'linear');     %单位：K
 
     v_ei = 54*Ne_cm3./Te.^(3/2);
     v_en = 9.32e-12*N2.*(1-3.44e-5*Te) + 1.21e-10*O2.*(1+2.15e-12*Te.^0.5).*Te+...
@@ -237,19 +225,20 @@ end
 n = sqrt(1 - 80.6*Ne_e12m3./f_Mhz^2./(1-1j*Z));
 
 % 高度60km以下采用对流层大气折射率的指数模型
-idx_60 = find(z_km < 60);
-N = 313*exp(-0.137*z_km(idx_60));                   % 折射率，单位为km
+idx_60 = find(h_km < 60);
+N = 313*exp(-0.137*h_km(idx_60));                   % 折射率，单位为km
 n(idx_60) = 1 + N*1e-6;
 
 
-if figure
-    figure();
-    plot(Ne_e12m3*1e12, z_km, 'black-', 'LineWidth', 1); hold on;
-    xlabel('电子浓度'); ylabel('z (km)');
-    xlim([0, inf]);
-    grid on;
-end
+%  应用地球展开变换得到 PE 等效折射率
+% 精确公式: n_PE(z) = n_raw(h) * (R + h) / R
+% 其中 (R+h)/R 正好等于 exp(z/R)
+n = n .* (1 + h_km ./ R); 
+% 或者写成: n = n_raw .* exp(z_km ./ R); 结果是一样的
+
+% 防止折射指数无限增长
+idx_sponge_start = floor(Nz * d * 0.8); 
+n(idx_sponge_start:end) = n(idx_sponge_start);
 
 end
-
 
