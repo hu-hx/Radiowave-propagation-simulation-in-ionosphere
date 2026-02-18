@@ -5,6 +5,8 @@ tic
 % by huhaixiang  2026.1.18
 % 后续还可以加入two way,brick,3D
 
+%2026.2.18 修改了PL计算中lambda单位错误的问题
+
 
 
 %% 参数设置
@@ -83,10 +85,6 @@ w( z < d*z_max ) = 1;
 n = Ne2n(file_Ne, z_km, f_Mhz, absorb, false);
 
 
-%% 滤波器
-evanescent_mask = zeros(size(pz));
-evanescent_mask(pz < k0) = 1; % 只有 pz < k0 的波是传播波，其他是倏逝波
-
 %% SSFT步进傅里叶算法 水平极化波采用快速正弦变换
 
 fprintf('正在求解SSFT...\n');
@@ -111,8 +109,8 @@ end
 
  
 for j = 1:Nx-1 
-    dst_u   = dst(u(:,j));
-    u(:,j+1) = k1 .* idst( k2.*dst_u.*evanescent_mask ) .* w ; 
+    dst_u = dst(u(:,j));
+    u(:,j+1) = k1 .* idst( k2.*dst_u ) .* w ; 
 end
 
 
@@ -120,8 +118,8 @@ end
 
 fprintf('正在计算传播损耗...\n');
 
-%F = 20*log10(abs(u)) + 10*log10(R*sin(x_km/R)+1e-6) + 10*log10(lambda);
-L = -20*log10(abs(u)) + 20*log10(4*pi) + 10*log10(R*sin(x_km/R)+1e-10) - 30*log10(lambda);
+%F = 20*log10(abs(u)) + 10*log10(R*sin(x_km/R)+1e-6) + 10*log10(lambda/1e3);
+L = -20*log10(abs(u)) + 20*log10(4*pi) + 10*log10(R*sin(x_km/R)+1e-10) - 30*log10(lambda/1e3);
 
 
 %% 图像的绘制
@@ -161,14 +159,14 @@ figure('Position',[100, 100, 1000, 500])
 pcolor(x_km(secx),z_km(secz),L(secz,secx))
 shading flat;
 colormap(fliplr(jet))
-clim([60 120]);    % 颜色范围锁定
+clim([100 220]);    % 颜色范围锁定
 colorbar;
 
 ylim([0,z_max_km_plot])
 
 xlabel('距离/km');
 ylabel('高度/km');
-title('抛物方程和射线追踪对照');
+title('抛物方程损失图像');
 %saveas(gcf, '../抛物方程和射线追踪对照.png', 'png');
 
 % figure(5)
