@@ -5,7 +5,8 @@ tic
 % by huhaixiang  2026.1.18
 % 后续还可以加入two way,brick,3D
 
-%2026.2.18 修改了PL计算中lambda单位错误的问题
+% 2026.2.18 修改了PL计算中lambda单位错误的问题
+% 2026.3.2 加入了原始的近远场转换并解高斯函数的傅里叶变换得到新的初始场计算公式；为损失函数的log统一加上了极小值
 
 
 
@@ -17,7 +18,7 @@ f_Mhz = f/1e6;
 c = 3e8;                             % 光速
 lambda = c / f;                      % 波长
 k0 = 2 * pi / lambda;                % 波数
-theta0 = deg2rad(15);                % 仰角
+theta0 = deg2rad(30);                % 仰角
 z0 = 300;                            % 天线架设高度
 beta = deg2rad(3);                   % 波束宽度
 R = 6378.137;
@@ -33,7 +34,7 @@ fig_step = 5;                       % 数据绘图的间隔，减少绘图时间
 
 % 方法选择
 inti_methods = 1;
-SSFT_methods = 1;
+SSFT_methods = 3;
 
 % 折射指数
 absorb = false; % 是否考虑电子碰撞吸收
@@ -66,10 +67,16 @@ u = zeros(Nz,Nx);
 
 switch inti_methods
 
-    case 1 % 基于《电波传播的抛物方程方法》
+    case 1 % 基于《电波传播的抛物方程方法》 适用于窄角情况
         u_fs1 = k0*beta/(2*sqrt(2*pi*log(2)))*(exp(1i*k0*theta0*z)).*exp(-beta^2/(8*log(2))*k0^2*(z-z0).^2);
         u_fs2 = k0*beta/(2*sqrt(2*pi*log(2)))*(exp(-1i*k0*theta0*z)).*exp(-beta^2/(8*log(2))*k0^2*(z+z0).^2);
         u(:,1) = u_fs1 - u_fs2;   
+    case 2 % 基于远近场变换和高斯函数的解析表达
+        p0 = k0*sin(theta0);
+        w = sqrt(2 * log(2)) / (k0 * sin(beta / 2));
+        u(:,1) = exp(-(z - z0).^2 / w^2) .* exp( 1j * p0 .* (z - z0)) ...
+       - exp(-(z + z0).^2 / w^2) .* exp(-1j * p0 .* (z + z0));
+
 end
 u(:,1) = u(:,1)/max(abs(u(:,1)));
 
@@ -119,8 +126,7 @@ end
 fprintf('正在计算传播损耗...\n');
 
 %F = 20*log10(abs(u)) + 10*log10(R*sin(x_km/R)+1e-6) + 10*log10(lambda/1e3);
-L = -20*log10(abs(u)) + 20*log10(4*pi) + 10*log10(R*sin(x_km/R)+1e-10) - 30*log10(lambda/1e3);
-
+L = -20*log10(abs(u)+1e-6) + 20*log10(4*pi) + 10*log10(R*sin(x_km/R)+1e-6) - 30*log10(lambda/1e3);
 
 %% 图像的绘制
 
@@ -200,11 +206,6 @@ else     % 仅考虑折射
 end
 
 n = sqrt(1 - 80.6*Ne_e12m3./f_Mhz^2./(1-1j*Z));
-
-% 高度60km以下采用对流层大气折射率的指数模型
-idx_60 = find(z_km < 60);
-N = 313*exp(-0.137*z_km(idx_60));                   % 折射率，单位为km
-n(idx_60) = 1 + N*1e-6;
 
 
 if figure
