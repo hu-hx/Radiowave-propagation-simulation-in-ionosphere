@@ -4,48 +4,70 @@ tic
 % 制作深度学习训练所用的数据集
 % SSFT_PE_2D version:1.0 2026.2.18
 
-path = './Ne/';
-Ne_files = dir([path,'*.dat']);
-gap1 = 10;
-gap2 = 5;
+% 2.26.8:50 制作所有变量变化的数据集 预计计算66个小时 - 3.1.3:30
 
-for f = 1:50
-    for file_i = 1:length(Ne_files)
-        fprintf('当前进度: f=%d, file=%d/%d\n', f, file_i, length(Ne_files));
-        theta0 = deg2rad(10);
-        Ne_file = Ne_files(file_i).name;
-        PL = SSFT_PE_2D(path,f,theta0,Ne_file);
-        PL = round(PL, 3);
-        PL = PL(1:gap1:end,1:gap2:end);
-        writematrix(PL, ['output_dataset/',num2str(f),'_',Ne_file(1:end-4),'.dat'], 'Delimiter', ' ');
-        clear PL;
-        drawnow limitrate;
+path_Ne = 'D:\\desktop\\full_unet_train\\full_data\\Ne\\';
+Ne_files = dir([path_Ne,'*.dat']);
+
+
+% 五个变量 f theta0 z0 beta Ne
+f_range = [1:2:30,35:5:50];
+theta_range = 5:10:25;
+z_range = 100:200:300;
+beta_range = 3:2:5;
+total_files = length(Ne_files);
+
+
+total_loops = length(f_range) * length(theta_range) * length(z_range) * ...
+              length(beta_range) * total_files;
+
+
+current_count = 0;
+
+for f = f_range
+    for theta0 = theta_range
+        for z0 = z_range
+            for beta = beta_range
+                for file_i = 1:total_files
+                    
+                    current_count = current_count + 1;
+                    percent = (current_count / total_loops) * 100;
+                    fprintf('[总进度: %3.2f%%]   f=%d theta=%d z=%d beta=%d Ne_files:%d/%d\n', ...
+                            percent, f, theta0, z0, beta, file_i, total_files);
+                    
+                    Ne_file = Ne_files(file_i).name;
+                    PL = SSFT_PE_2D(path_Ne,f,theta0,z0,beta,Ne_file);
+                    PL = round(PL, 3);
+                    PL = imresize(PL, [512, 512]);
+                    writematrix(PL, sprintf('D:\\desktop\\full_unet_train\\full_data\\PL\\%d_%d_%d_%d_%s.dat', f,theta0,z0,beta,Ne_file(1:end-4)), 'Delimiter', ' ');
+                    clear PL;
+
+                end
+            end
+        end
     end
 end
 
 
 
 
-function PL = SSFT_PE_2D(path,f,theta0,Ne_file)
+function PL = SSFT_PE_2D(path,f,theta0_deg,z0,beta_deg,Ne_file)
 %% 参数设置
 
 % 基础参数
 c = 3e8;                             % 光速
 lambda = c / (f*1e6);                      % 波长
 k0 = 2 * pi / lambda;                % 波数
-beta = deg2rad(3);                   % 波束宽度
+beta = deg2rad(beta_deg);                   % 波束宽度
+theta0 = deg2rad(theta0_deg);
 R = 6378.137;
-z0 = 300;
+
 
 % 网格参数
 x_max = 3000e3;
-dx = 1000;
+dx = 2000;
 z_max = 400e3;
-dz = 50;                     
-
-% 方法选择
-inti_methods = 1;
-SSFT_methods = 3;
+dz = lambda/4;                     
 
 d = 0.2;  
 
@@ -72,13 +94,11 @@ u = zeros(Nz,Nx);
 
 %% 求解初始场
 
-switch inti_methods
+p0 = k0*sin(theta0);
+w = sqrt(2 * log(2)) / (k0 * sin(beta / 2));
+u(:,1) = exp(-(z - z0).^2 / w^2) .* exp( 1j * p0 .* (z - z0)) ...
+    - exp(-(z + z0).^2 / w^2) .* exp(-1j * p0 .* (z + z0));
 
-    case 1 % 基于《电波传播的抛物方程方法》
-        u_fs1 = k0*beta/(2*sqrt(2*pi*log(2)))*(exp(1i*k0*theta0*z)).*exp(-beta^2/(8*log(2))*k0^2*(z-z0).^2);
-        u_fs2 = k0*beta/(2*sqrt(2*pi*log(2)))*(exp(-1i*k0*theta0*z)).*exp(-beta^2/(8*log(2))*k0^2*(z+z0).^2);
-        u(:,1) = u_fs1 - u_fs2;   
-end
 u(:,1) = u(:,1)/max(abs(u(:,1)));
 
 
@@ -94,29 +114,12 @@ n = Ne2n(path,Ne_file,f,x_km,z_km);
 
 %% SSFT步进傅里叶算法 水平极化波采用快速正弦变换
 
+k1 = exp(1i*k0*(n-1)*dx);
+k2 = exp( 1i*k0*dx*(sqrt(1-pz.^2/k0^2)-1) );
 
-switch SSFT_methods
-    % k1:折射指数项
-    % k2:绕射指数项
-    case 1   % Talor展开近似的窄角抛物方程 SPE
-        k1 = exp(1i*k0*(n.^2-1)*dx/2);   
-        k2 = exp(-1i.*pz.^2*dx/(2*k0));
-
-    case 2   % Feit‐Fleck型宽角抛物方程，不知怎么推导出来
-        k1_1 = exp(-k0*imag(n)*dx); 
-        k1_2 = exp(1j*k0*dx*(real(n)-2));
-        k1 = k1_1.*k1_2;
-        k2 = exp(1j*dx*sqrt(k0^2-pz.^2));
-
-    case 3   % Feit‐Fleck型宽角抛物方程，可以正常推导出来
-        k1 = exp(1i*k0*(n-1)*dx);       
-        k2 = exp( 1i*k0*dx*(sqrt(1-pz.^2/k0^2)-1) );
-end
-
- 
-for j = 1:Nx-1 
+for j = 1:Nx-1
     dst_u   = dst(u(:,j));
-    u(:,j+1) = k1(:,j+1) .* idst( k2.*dst_u ) .* w ; 
+    u(:,j+1) = k1(:,j+1) .* idst( k2.*dst_u ) .* w ;
 end
 
 
@@ -125,7 +128,7 @@ end
 
 
 %F = 20*log10(abs(u)) + 10*log10(R*sin(x_km/R)+1e-6) + 10*log10(lambda);
-PL = -20*log10(abs(u)) + 20*log10(4*pi) + 10*log10(R*sin(x_km/R)+1e-10) - 30*log10(lambda/1e3);
+PL = -20*log10(abs(u)+1e-6) + 20*log10(4*pi) + 10*log10(R*sin(x_km/R)+1e-6) - 30*log10(lambda/1e3);
 
 fig = figure('Position',[100, 100, 1000, 500],'Visible', 'off');
 pcolor(x_km,z_km,PL)
@@ -138,8 +141,8 @@ ylim([0,z_max_km_plot])
 
 xlabel('距离/km');
 ylabel('高度/km');
-title([num2str(f),'-',num2str(Ne_file)]);
-exportgraphics(fig, ['./output_dataset/figure/',num2str(f),'_',Ne_file(1:end-4),'.png'], 'Resolution', 150);
+title(sprintf('f%d-theta%d-zs%d-beta%d-date%s.dat', f,theta0_deg,z0,beta_deg,Ne_file(1:end-4)));
+exportgraphics(fig, sprintf('D:\\desktop\\full_unet_train\\full_data\\figure\\%d_%d_%d_%d_%s.png', f,theta0_deg,z0,beta_deg,Ne_file(1:end-4)), 'Resolution', 150);
 
 close(fig); % 强制关闭图形窗口，释放内存
 delete(fig); % 双重保险清除句柄
