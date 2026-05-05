@@ -45,16 +45,12 @@ Radiowave-propagation-simulation/
 
 - **窄角近似**：Taylor 近似抛物方程，适用于小角度传播
 - **宽角近似**：Feit-Fleck 近似，适用于大角度场景
-- **步进求解**：采用快速正弦变换（DST）进行频域步进，支持 MEX 加速
+- **步进求解**：采用快速正弦变换（DST）或者混合傅里叶变换进行频域步进
 - **边界条件**：上边界采用平滑吸收层，下边界支持 PEC 和阻抗边界
 
 ### 大气波导仿真
 
-支持多种波导类型的折射率剖面建模：
-- 标准大气
-- 蒸发波导
-- 表面波导
-- 抬升波导
+支持多种波导类型的折射率剖面建模以及GUI界面
 
 ### 深度学习模型
 
@@ -64,57 +60,7 @@ Radiowave-propagation-simulation/
 - 多尺度特征融合，保留高频细节
 - 组合损失函数：梯度加权 L1 + 多尺度 SSIM + 频域损失
 
-## 依赖环境
-
-### MATLAB 部分
-- MATLAB R2020a 或更高版本
-- Signal Processing Toolbox（用于 DST 等变换）
-
-### Python 部分
-- Python 3.8+
-- NumPy, SciPy, Matplotlib
-- PyQt6（大气波导 GUI）
-- PyTorch 2.0+（深度学习模块）
-
-## 使用说明
-
-### MATLAB 仿真
-```matlab
-% 电离层电波传播
-cd PE_SSFT
-PE_SSFT_2D
-
-% 大气波导传播
-PE_SSFT_2D_atmoduct
-```
-
-### Python 大气波导仿真
-```bash
-cd atmospheric_duct
-python PE_SSFT_2D_atmoduct.py
-
-# 启动图形界面
-python atmo_duct_GUI.py
-```
-
-### 深度学习模型
-```bash
-# 1. 使用 MATLAB 脚本生成数据集
-cd deeplearning/make_dataset
-# 运行 make_dataset_Ne.m 和 make_dataset_PL.m
-
-# 2. 训练模型
-cd ../U-Net
-python train.py
-
-# 3. 预测
-python predict.py
-```
-
-## 作者
-
-huhaixiang
 
 ## License
 
-本项目仅供学术研究使用。
+本项目仅供参考
