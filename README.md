@@ -18,7 +18,7 @@ Radiowave-propagation-simulation/
 │   └── SSHFT_mex.cpp           # MEX 加速的正弦变换实现
 │
 ├── atmospheric_duct/           # Python 大气波导仿真及 GUI
-│   ├── PE_SSFT_2D_atmoduct.py  # 波导传播核心算法（Feit-Fleck 宽角近似）
+│   ├── PE_SSFT_2D_atmoduct.py  # 设置了不同波导对应的折射率剖面
 │   ├── atmo_duct_GUI.py        # PyQt6 图形界面，支持参数配置与结果可视化
 │   └── png_to_ico.py           # 图标转换工具
 │
@@ -30,7 +30,7 @@ Radiowave-propagation-simulation/
 │       ├── model.py            # ResNet残差块 + CBAM注意力 + FiLM频率调制
 │       ├── train.py            # 训练脚本（混合精度 + 早停 + 梯度裁剪）
 │       ├── predict.py          # 预测与验证
-│       ├── dataset.py          # 数据集加载
+│       ├── dataset.py          # 数据集加载和预处理
 │       └── losses1.py          # 组合损失函数（GradientWeightedL1 + MS-SSIM + FrequencyLoss）
 │
 └── ray/                        # 射线追踪
