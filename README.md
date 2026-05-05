@@ -1,5 +1,5 @@
-# Radiowave(HF) propagation simulation in ionosphere based on the parabolic equation
-2D Raidowave propagation simulation in ionosphere based on the parabolic equation with Split-step Fourier transform(SSFT)
+# Radiowave propagation simulation
+2D Raidowave propagation simulation  based on the parabolic equation with Split-step Fourier transform(SSFT) and Intelligent propagation
 
 ## 文件说明
 * **SSFT_PE_2D.m**: 利用抛物方程的分布傅里叶算法计算大范围的电波传播路径损耗。
