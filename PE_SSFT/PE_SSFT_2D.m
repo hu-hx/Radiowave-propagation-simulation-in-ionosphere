@@ -84,7 +84,7 @@ w( z < d*z_max_wid ) = 1;
 
 %% 折射指数  
 
-n = Ne2n(file_Ne, z_km, f_Mhz, absorb, false,R);
+n = Ne2n(file_Ne, z_km, f, absorb, false,R);
 
 %% SSFT步进傅里叶算法 PEC地表水平极化波采用快速正弦变换
 
@@ -170,14 +170,14 @@ toc
 
 
 
-function n = Ne2n(Ne_flie,z_km,f_Mhz,absorb,figure,R)
+function n = Ne2n(Ne_flie,z_km,f,absorb,figure,R)
 
 h_km = R * (exp(z_km ./ R) - 1);  % 网格z_km -> 真实高度h_km
 
 % 读取电子浓度Ne
 Ne_file = table2array(readtable(Ne_flie,'VariableNamingRule', 'preserve'));
 Ne_cm3 = interp1(Ne_file(:,1),Ne_file(:,2),h_km,'linear');
-Ne_e12m3 = Ne_cm3*1e-6;         % 原单位:cm-3 -> 10^12 m-3
+Ne_m3 = Ne_cm3*1e6;         % 原单位:cm-3 ->  m-3
 
 if absorb % 考虑吸收效应 参考"一种基于宽角抛物方程的电离层行进式扰动短波传播效应数值计算方法"
     msis = table2array(readtable("nrlmsis_output.txt",'VariableNamingRule','preserve'));
@@ -190,18 +190,18 @@ if absorb % 考虑吸收效应 参考"一种基于宽角抛物方程的电离层
     v_en = 9.32e-12*N2.*(1-3.44e-5*Te) + 1.21e-10*O2.*(1+2.15e-12*Te.^0.5).*Te+...
         5.49e-10.*O.*Te.^0.5;
     ve = v_en + v_ei;
-    Z = ve/(2*pi*f_Mhz*1e6);
+    Z = ve/(2*pi*f);
 else     % 仅考虑折射
     Z = 0;
 end
 
-n = sqrt(1 - 80.6*Ne_e12m3./f_Mhz^2./(1-1j*Z));
+n = sqrt(1 - 80.6*Ne_m3./f^2./(1-1j*Z));
 n = n .* (1 + h_km ./ R); 
 
 
 if figure
     figure(4);
-    plot(Ne_e12m3*1e12, h_km, 'black-', 'LineWidth', 1); hold on;
+    plot(Ne_m3, h_km, 'black-', 'LineWidth', 1); hold on;
     xlabel('电子浓度'); ylabel('z (km)');
     xlim([0, inf]);
     grid on;
